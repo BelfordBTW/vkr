@@ -1,0 +1,144 @@
+===Q11_WITH
+                                                QUERY PLAN                                                
+----------------------------------------------------------------------------------------------------------
+ Limit (actual rows=4.00 loops=1)
+   Buffers: shared hit=12 read=1
+   ->  Sort (actual rows=4.00 loops=1)
+         Sort Key: created_at DESC
+         Sort Method: quicksort  Memory: 25kB
+         Buffers: shared hit=12 read=1
+         ->  Bitmap Heap Scan on transactions (actual rows=4.00 loops=1)
+               Recheck Cond: ((character_id = 5000) AND (created_at > (now() - '30 days'::interval)))
+               Heap Blocks: exact=4
+               Buffers: shared hit=9 read=1
+               ->  Bitmap Index Scan on ix_transactions_char_time (actual rows=4.00 loops=1)
+                     Index Cond: ((character_id = 5000) AND (created_at > (now() - '30 days'::interval)))
+                     Index Searches: 1
+                     Buffers: shared hit=5 read=1
+ Planning:
+   Buffers: shared hit=144
+ Planning Time: 1.257 ms
+ Execution Time: 0.949 ms
+(18 rows)
+
+===Q11_WITHOUT
+                                              QUERY PLAN                                              
+------------------------------------------------------------------------------------------------------
+ Limit (actual rows=4.00 loops=1)
+   Buffers: shared hit=1915 dirtied=23
+   ->  Sort (actual rows=4.00 loops=1)
+         Sort Key: created_at DESC
+         Sort Method: quicksort  Memory: 25kB
+         Buffers: shared hit=1915 dirtied=23
+         ->  Gather (actual rows=4.00 loops=1)
+               Workers Planned: 1
+               Workers Launched: 1
+               Buffers: shared hit=1915 dirtied=23
+               ->  Parallel Seq Scan on transactions (actual rows=2.00 loops=2)
+                     Filter: ((character_id = 5000) AND (created_at > (now() - '30 days'::interval)))
+                     Rows Removed by Filter: 101306
+                     Buffers: shared hit=1915 dirtied=23
+ Planning:
+   Buffers: shared hit=7
+ Planning Time: 0.217 ms
+ Execution Time: 34.029 ms
+(18 rows)
+
+===Q10_WITH
+                                          QUERY PLAN                                           
+-----------------------------------------------------------------------------------------------
+ Limit (actual rows=10.00 loops=1)
+   Buffers: shared hit=15 dirtied=7
+   ->  WindowAgg (actual rows=10.00 loops=1)
+         Window: w1 AS (ORDER BY experience ROWS UNBOUNDED PRECEDING)
+         Storage: Memory  Maximum Storage: 17kB
+         Buffers: shared hit=15 dirtied=7
+         ->  Index Scan using ix_characters_class_xp on characters (actual rows=10.00 loops=1)
+               Index Cond: (class_id = 2)
+               Index Searches: 1
+               Buffers: shared hit=15 dirtied=7
+ Planning:
+   Buffers: shared hit=162 dirtied=6
+ Planning Time: 0.940 ms
+ Execution Time: 0.267 ms
+(14 rows)
+
+===Q10_WITHOUT
+                               QUERY PLAN                               
+------------------------------------------------------------------------
+ Limit (actual rows=10.00 loops=1)
+   Buffers: shared hit=159 dirtied=71
+   ->  WindowAgg (actual rows=10.00 loops=1)
+         Window: w1 AS (ORDER BY experience ROWS UNBOUNDED PRECEDING)
+         Storage: Memory  Maximum Storage: 17kB
+         Buffers: shared hit=159 dirtied=71
+         ->  Sort (actual rows=10.00 loops=1)
+               Sort Key: experience DESC
+               Sort Method: quicksort  Memory: 194kB
+               Buffers: shared hit=159 dirtied=71
+               ->  Seq Scan on characters (actual rows=2500.00 loops=1)
+                     Filter: ((NOT is_deleted) AND (class_id = 2))
+                     Rows Removed by Filter: 7500
+                     Buffers: shared hit=156 dirtied=71
+ Planning:
+   Buffers: shared hit=7
+ Planning Time: 0.147 ms
+ Execution Time: 3.608 ms
+(18 rows)
+
+===Q8
+                                                 QUERY PLAN                                                 
+------------------------------------------------------------------------------------------------------------
+ Sort (actual rows=5.00 loops=1)
+   Sort Key: q.is_main DESC, q.min_level
+   Sort Method: quicksort  Memory: 25kB
+   Buffers: shared hit=35
+   ->  Hash Anti Join (actual rows=5.00 loops=1)
+         Hash Cond: (q.quest_id = qp.quest_id)
+         Join Filter: (NOT EXISTS(SubPlan 1))
+         Buffers: shared hit=27
+         ->  Merge Anti Join (actual rows=14.00 loops=1)
+               Merge Cond: (q.quest_id = cq.quest_id)
+               Join Filter: ((cq.status = 'active'::quest_status_t) OR (NOT q.is_repeatable))
+               Buffers: shared hit=7
+               ->  Sort (actual rows=20.00 loops=1)
+                     Sort Key: q.quest_id
+                     Sort Method: quicksort  Memory: 26kB
+                     Buffers: shared hit=4
+                     ->  Nested Loop (actual rows=20.00 loops=1)
+                           Join Filter: ((q.min_level)::smallint <= (c.level)::smallint)
+                           Buffers: shared hit=4
+                           ->  Index Scan using characters_pkey on characters c (actual rows=1.00 loops=1)
+                                 Index Cond: (character_id = 5000)
+                                 Index Searches: 1
+                                 Buffers: shared hit=3
+                           ->  Seq Scan on quests q (actual rows=20.00 loops=1)
+                                 Buffers: shared hit=1
+               ->  Index Scan using character_quests_pkey on character_quests cq (actual rows=6.00 loops=1)
+                     Index Cond: (character_id = 5000)
+                     Index Searches: 1
+                     Buffers: shared hit=3
+         ->  Hash (actual rows=13.00 loops=1)
+               Buckets: 1024  Batches: 1  Memory Usage: 9kB
+               Buffers: shared hit=1
+               ->  Seq Scan on quest_prerequisites qp (actual rows=13.00 loops=1)
+                     Buffers: shared hit=1
+         SubPlan 1
+           ->  Index Scan using character_quests_pkey on character_quests d (actual rows=0.00 loops=9)
+                 Index Cond: ((character_id = c.character_id) AND (quest_id = qp.requires_quest_id))
+                 Filter: (status = 'completed'::quest_status_t)
+                 Rows Removed by Filter: 0
+                 Index Searches: 9
+                 Buffers: shared hit=19
+ Planning:
+   Buffers: shared hit=368 read=4
+ Planning Time: 2.093 ms
+ Execution Time: 0.262 ms
+(45 rows)
+
+===ISOLATION
+ default_transaction_isolation 
+-------------------------------
+ read committed
+(1 row)
+

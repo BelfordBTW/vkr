@@ -1,0 +1,5 @@
+instance=221 slot=0 success=1 failed=19
+     19 ERROR:  Ячейка 0 пуста
+inventory rows: 1 holder: 200
+owner: 200
+transfers logged: 1
